@@ -27,7 +27,7 @@
 
 <a id="chapter-2"></a>
 ## Схема подключения
-![СХЕМА](https://github.com/voltNik/AltMeter/blob/master/scheme.jpg)
+![СХЕМА](https://github.com/voltNik/ReactGame/blob/master/ReactGame_scheme.jpg)
 
 <a id="chapter-3"></a>
 ## Материалы и компоненты
