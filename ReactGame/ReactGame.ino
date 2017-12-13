@@ -1,39 +1,41 @@
 // Игра реакции. 
-// Для тренировки внимания и быстроты реагирования совмещенная с челночным бегом.
+// Для тренировки внимания и быстроты реакции, плюс совмещенная с челночным бегом.
 // Креатед бай voltNik (c) в 2017 году нашей эры
 #include <Wire.h> 
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
 #include <Utility.h>
-#include "tones.h"
+#include "tones.h" // файл нот, лежит в папке прошивки
 
-#define GAMETIME 180000 // длительность игры. 180 секунд. смена в хоккее.
-#define LAMP 9       // количество кнопок в игре
-#define RES_KEY 12  // номер кнопки для перезагрузки игры. RESET
-#define BUZZER_PIN 14 // пин подключения пищалки
+#define GAMETIME 30000   // 30 секунд - длительность игры в микросекундах. рекомендую ставить 120 или 180 секунд.
+#define LAMP 4           // количество кнопок в игре. максммально до 15.
+#define RES_KEY 15       // номер кнопки для перезагрузки игры - RESET. подключена к К16
+#define BUZZER_PIN 19    // пин подключения пищалки
+#define BLINK 300        // время мигания кнопки 300мс
 
-LiquidCrystal_I2C lcd(0x3F,16,2);  // обычно на китайских I2C экранах адреса 0x27 или 0x3F
+LiquidCrystal_I2C lcd(0x27,16,2);  // обычно на китайских I2C экранах адреса 0x27 или 0x3F
 
 const byte ROWS = 4; //four rows
 const byte COLS = 4; //four columns
 char hexaKeys[ROWS][COLS] = { // таблица символов клавиатуры. если отнять от кода символа 48, то будет просто номер нажатой цифры. 
-  {'0','1','2','3'},          // т.е. номер кнопки. у "0" ascii код 48, минус 48 и получаем 0 цифрой, у "1" код 49 и т.д. костыль, но работает.   
-  {'4','5','6','7'},
-  {'8','9',':',';'},
-  {'<','=','>','?'}
+  {'<','8','4','0'},          // т.е. номер кнопки. у "0" ascii код 48, минус 48 и получаем 0 цифрой, у "1" код 49 и т.д. костыль, но работает.   
+  {'=','9','5','1'}, 
+  {'>',':','6','2'},
+  {'?',';','7','3'}
 };
 
 byte colPins[ROWS] = {39,37,35,33};  // пины к которым подключена клавиатура от 33 и далее вдоль края MEGA
 byte rowPins[COLS] = {41,43,45,47};
 
-boolean lamp_on[LAMP];
+boolean lamp_on[15];
 boolean steps = true, go_game = true;
-int lamp_pin[LAMP] = {2,3,4,5,8,7,6,9,10}; // последовательность пинов к которым подключены светодиоды кнопок. тут можно перенастроить соответствие светодиод-кнопка. как видите они у меня не по порядку. так припаял.
+int lamp_pin[15] = {2,3,4,5,6,7,8,9,10,11,12,13,14,15,16}; // ПИНы к которым подключены светодиоды кнопок. можно поменять местами если неправильно припаяли.
 
 long last_pressed = 0;
 long nowMillis = 0;
 long toSec = 0;
 long gameStart = 0;
+long toBlink = 0;
 
 int score = 0;
 int dlay = 1000;
@@ -52,13 +54,12 @@ void setup()
 {
   Serial.begin(9600);
   Serial.println("REACT GAME");
-  
   randomSeed(analogRead(0));  // включение случайного random
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(LED_BUILTIN,OUTPUT);
   tone(BUZZER_PIN, 5000, 500);
   foreach (lamp_pin, LAMP, pinMode, OUTPUT);   // выводы на светодиоды кнопок
-  foreach (lamp_pin, LAMP, digitalWrite, HIGH); // проверяем работу светодиодов 
+  foreach (lamp_pin, LAMP, digitalWrite, HIGH); // включаем все и проверяем работу светодиодов 
   delay(2000);
   foreach (lamp_pin, LAMP, digitalWrite, LOW); 
   delay(500);
@@ -86,10 +87,8 @@ void setup()
   for (int i=0; i<5; i++) {
     int frequency = 4000 + i * 300;
     tone(BUZZER_PIN, frequency, 150);
-    delay(100);
+    delay(130);
   }
-  //delay(500); 
-  
   gameStart = millis();
   nowMillis = gameStart;
   score = 0;
@@ -98,22 +97,31 @@ void setup()
 //=====================================
 void loop()
 {
-  while ((nowMillis-gameStart<GAMETIME)and(go_game)) {
+  while ((nowMillis-gameStart<GAMETIME)and(go_game)) { // цикл игры
     nowMillis = millis();
+    //**********
     if (nowMillis - toSec > 1000) { // обновление экрана каждую секунду
       lcd_print();
       toSec = nowMillis; 
     } 
+    //**********
+    if (nowMillis - toBlink > BLINK) { // мигание кнопки
+      if (lamp_on[old_butn]) {sw_led_off(old_butn);} 
+      else {sw_led_on(old_butn);}
+      toBlink = nowMillis; 
+    } 
+    //**********
     if (steps) {   // выбираем новую кнопку для нажатия. любую кроме той же.
-
       while (old_butn == butn) {   
         butn = random(LAMP);
       }
+      sw_led_off(old_butn);
       old_butn = butn;
       Serial.print("Butn: "); Serial.println(butn);
       sw_led_on(butn);
       steps = false;
     }
+    //**********
     customKey = customKeypad.getKey(); // считывание нажатия кнопки
     if (customKey) Serial.println((int)customKey);
     if (customKey-48 == butn){     // нажата правильная кнопка
@@ -141,11 +149,6 @@ void loop()
  customKey = customKeypad.getKey();  
  if (customKey-48 == RES_KEY) { // перезапуск по RESET
    go_game = true;
-   //gameStart = millis();
-   //nowMillis = gameStart;
-   //score = 0;
-   //steps = true;
-
    lcd.clear();
    lcd.setCursor(0, 0);
    lcd.print("RESTART!");
@@ -177,7 +180,6 @@ void game_over() {
   lcd.print(" SCORE: ");
   lcd.print(score);
   foreach (lamp_pin, LAMP, digitalWrite, HIGH); 
-
   for (int thisNote = 0; thisNote < 8; thisNote++) {
     int noteDuration = 1000 / noteDurations[thisNote];
     tone(BUZZER_PIN, melody[thisNote], noteDuration);
